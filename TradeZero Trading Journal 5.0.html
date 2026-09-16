@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TradeZero Trading Journal</title>
+  
+  <!-- Chart.js for Equity Curve -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- SheetJS for Excel (.xlsx, .xls) parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #0d0e12;
+      --card-bg: #181920;
+      --card-border: #262833;
+      --text-main: #ffffff;
+      --text-muted: #8b8f9a;
+      --green: #22c55e;
+      --red: #ef4444;
+      --accent-purple: #8b5cf6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1300px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Top Header Bar */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 16px 24px;
+      border-radius: 12px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .upload-btn-wrapper {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+    }
+
+    .btn-upload {
+      border: 1px solid var(--accent-purple);
+      color: #fff;
+      background-color: var(--accent-purple);
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-clear {
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      background-color: transparent;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-clear:hover {
+      background-color: rgba(239, 68, 68, 0.1);
+      color: var(--red);
+      border-color: var(--red);
+    }
+
+    .upload-btn-wrapper input[type=file] {
+      font-size: 100px;
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    /* Top Balance Banner */
+    .top-stats {
+      display: flex;
+      gap: 48px;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-title {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+    }
+
+    .stat-value.green { color: var(--green); }
+    .stat-value.white { color: #fff; }
+
+    /* Chart Section */
+    .chart-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .chart-metrics {
+      display: flex;
+      gap: 24px;
+    }
+
+    /* Primary Key Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .card-title {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .card-val {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    /* Tables Grid */
+    .tables-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .tables-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    th {
+      color: var(--text-muted);
+      font-weight: 500;
+      padding: 10px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    td {
+      padding: 12px 10px;
+      border-bottom: 1px solid #1f212a;
+    }
+
+    .empty-msg {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 30px;
+      font-style: italic;
+    }
+
+    .badge-buy { background: rgba(34, 197, 94, 0.15); color: var(--green); border: 1px solid var(--green); padding: 2px 6px; border-radius: 4px; }
+    .badge-sell { background: rgba(239, 68, 68, 0.15); color: var(--red); border: 1px solid var(--red); padding: 2px 6px; border-radius: 4px; }
+    
+    .badge-win { background: rgba(34, 197, 94, 0.2); color: var(--green); padding: 2px 6px; border-radius: 4px; }
+    .badge-loss { background: rgba(239, 68, 68, 0.2); color: var(--red); padding: 2px 6px; border-radius: 4px; }
+
+    .table-footer-summary {
+      display: flex;
+      justify-content: space-around;
+      background: #121318;
+      padding: 12px;
+      border-radius: 0 0 8px 8px;
+      border-top: 1px solid var(--card-border);
+      font-size: 14px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- Header with Upload & Clear Buttons -->
+    <div class="header-bar">
+      <h2>TradeZero Trading Journal</h2>
+      <div class="header-actions">
+        <button class="btn-clear" onclick="clearStoredData()">Clear Data</button>
+        <div class="upload-btn-wrapper">
+          <button class="btn-upload">Import TradeZero CSV/Excel</button>
+          <input type="file" id="fileInput" accept=".csv, .xlsx, .xls" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Balance Banner -->
+    <div class="top-stats">
+      <div class="stat-item">
+        <span class="stat-title">Current Balance</span>
+        <span class="stat-value green" id="topBalance">$2,493.00</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-title">Total P&L</span>
+        <span class="stat-value white" id="topTotalPnL">$0.00</span>
+      </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="stats-grid">
+      <div class="card">
+        <div class="card-title">Win Rate</div>
+        <div class="card-val" id="statWinRate" style="color: var(--green);">0.0%</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Avg Win / Avg Loss</div>
+        <div class="card-val" id="statRewardRisk">0.00</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Net Profit</div>
+        <div class="card-val" id="statNetProfit">$0.00</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Gross Profit</div>
+        <div class="card-val" id="statGrossProfit">$0.00</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Gross Loss</div>
+        <div class="card-val" id="statGrossLoss">$0.00</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Profit Factor</div>
+        <div class="card-val" id="statProfitFactor">0.00</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Best Profit</div>
+        <div class="card-val" id="statBestProfit">$0.00</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Biggest Loss</div>
+        <div class="card-val" id="statBiggestLoss">$0.00</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Expectancy</div>
+        <div class="card-val" id="statExpectancy">$0.00</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Avg. Trade Size</div>
+        <div class="card-val" id="statAvgTradeSize">0 shares</div>
+      </div>
+    </div>
+
+    <!-- Equity Curve Chart -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <h3>Equity Curve</h3>
+        <div class="chart-metrics">
+          <div><span style="color:var(--text-muted)">Starting Balance: </span><b>$2,493.00</b></div>
+          <div><span style="color:var(--text-muted)">Current Equity: </span><b id="chartEquity">$2,493.00</b></div>
+        </div>
+      </div>
+      <div style="height: 300px; width: 100%;">
+        <canvas id="equityChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Tables Layout -->
+    <div class="tables-grid">
+      
+      <!-- Closed Trades Table -->
+      <div class="table-container">
+        <h3 style="margin-bottom: 12px;">Closed Individual Trades</h3>
+        <div style="max-height: 380px; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th>Date / Time</th>
+                <th>Qty</th>
+                <th>Avg Entry</th>
+                <th>Avg Exit</th>
+                <th>Fees</th>
+                <th>Net P&L</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="tradesTableBody">
+              <tr><td colspan="9" class="empty-msg">No TradeZero trades uploaded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer-summary">
+          <div>Total Trades: <span id="tblTotalTrades">0</span></div>
+          <div>Total Fees: <span id="tblTotalFees">$0.00</span></div>
+          <div>Net P&L: <span id="tblTotalPnL">$0.00</span></div>
+        </div>
+      </div>
+
+      <!-- Daily Summary Table -->
+      <div class="table-container">
+        <h3 style="margin-bottom: 12px;">Daily Summary</h3>
+        <div style="max-height: 420px; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Trades</th>
+                <th>Daily P&L</th>
+              </tr>
+            </thead>
+            <tbody id="dailyTableBody">
+              <tr><td colspan="3" class="empty-msg">No daily data available.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    const STARTING_BALANCE = 2493.00;
+    let chartInstance = null;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initChart();
+      document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+      loadSavedData();
+    });
+
+    function loadSavedData() {
+      const savedData = localStorage.getItem('tradeZero_journal_data');
+      if (savedData) {
+        try {
+          const trades = JSON.parse(savedData);
+          if (Array.isArray(trades) && trades.length > 0) {
+            updateDashboard(trades, false);
+          }
+        } catch (err) {
+          console.error("Error restoring saved trade data:", err);
+        }
+      }
+    }
+
+    function clearStoredData() {
+      if (confirm("Are you sure you want to clear all stored trade data?")) {
+        localStorage.removeItem('tradeZero_journal_data');
+        location.reload();
+      }
+    }
+
+    function handleFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const fileName = file.name.toLowerCase();
+      if (fileName.endsWith('.csv')) {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          dynamicTyping: true,
+          complete: function(results) {
+            processTradeZeroData(results.data);
+          }
+        });
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.SheetNames[0];
+          const parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
+          processTradeZeroData(parsedData);
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    }
+
+    function processTradeZeroData(rawRows) {
+      function getVal(row, possibleKeys) {
+        for (let key of Object.keys(row)) {
+          const cleanKey = key.trim().toLowerCase();
+          for (let pKey of possibleKeys) {
+            if (cleanKey === pKey.toLowerCase()) {
+              return row[key];
+            }
+          }
+        }
+        return null;
+      }
+
+      let executions = [];
+
+      rawRows.forEach((row, idx) => {
+        const symbol = getVal(row, ['Symbol', 'Sym']);
+        const side = getVal(row, ['Side', 'B/S']);
+        const qty = Math.abs(parseFloat(getVal(row, ['Qty', 'Shares']) || 0));
+        const price = parseFloat(getVal(row, ['Price', 'Exec Price']) || 0);
+
+        const dateVal = getVal(row, ['S/D', 'T/D', 'Date']) || '';
+        const timeVal = getVal(row, ['Exec Time', 'Time']) || '';
+        const dateTimeStr = (dateVal + ' ' + timeVal).trim() || 'N/A';
+
+        const comm = parseFloat(getVal(row, ['Comm']) || 0);
+        const sec = parseFloat(getVal(row, ['SEC']) || 0);
+        const taf = parseFloat(getVal(row, ['TAF']) || 0);
+        const nscc = parseFloat(getVal(row, ['NSCC']) || 0);
+        const nasdaq = parseFloat(getVal(row, ['Nasdaq']) || 0);
+        const ecnRemc = parseFloat(getVal(row, ['ECN Remc']) || 0);
+        const totalFee = Math.abs(comm + sec + taf + nscc + nasdaq + ecnRemc);
+
+        if (symbol && side && qty > 0 && price > 0) {
+          executions.push({
+            id: idx,
+            symbol: symbol.toString().trim().toUpperCase(),
+            side: side.toString().trim().toUpperCase(),
+            qty: qty,
+            price: price,
+            fee: totalFee,
+            date: dateVal ? dateVal.toString().trim() : 'N/A',
+            dateTime: dateTimeStr
+          });
+        }
+      });
+
+      if (executions.length === 0) {
+        alert("Could not read TradeZero executions. Check that the uploaded file is a valid TradeZero export.");
+        return;
+      }
+
+      let closedTrades = [];
+      let activePositions = {};
+
+      executions.forEach(exec => {
+        const sym = exec.symbol;
+        if (!activePositions[sym]) {
+          activePositions[sym] = { longStack: [], shortStack: [] };
+        }
+
+        const pos = activePositions[sym];
+        let remQty = exec.qty;
+        let feePerShare = exec.fee / exec.qty;
+
+        if (exec.side === 'B' || exec.side === 'BUY') {
+          while (remQty > 0 && pos.shortStack.length > 0) {
+            let shortOpen = pos.shortStack[0];
+            let matched = Math.min(remQty, shortOpen.qty);
+
+            let grossPnL = (shortOpen.price - exec.price) * matched;
+            let totalTradeFee = (shortOpen.feePerShare + feePerShare) * matched;
+            let netPnL = grossPnL - totalTradeFee;
+
+            closedTrades.push({
+              symbol: sym,
+              type: 'SHORT',
+              dateTime: exec.dateTime,
+              date: exec.date,
+              qty: matched,
+              entryPrice: shortOpen.price,
+              exitPrice: exec.price,
+              fee: totalTradeFee,
+              pnl: netPnL
+            });
+
+            shortOpen.qty -= matched;
+            remQty -= matched;
+            if (shortOpen.qty === 0) pos.shortStack.shift();
+          }
+
+          if (remQty > 0) {
+            pos.longStack.push({
+              price: exec.price,
+              qty: remQty,
+              feePerShare: feePerShare,
+              dateTime: exec.dateTime,
+              date: exec.date
+            });
+          }
+        } 
+        else if (exec.side === 'S' || exec.side === 'SELL') {
+          while (remQty > 0 && pos.longStack.length > 0) {
+            let longOpen = pos.longStack[0];
+            let matched = Math.min(remQty, longOpen.qty);
+
+            let grossPnL = (exec.price - longOpen.price) * matched;
+            let totalTradeFee = (longOpen.feePerShare + feePerShare) * matched;
+            let netPnL = grossPnL - totalTradeFee;
+
+            closedTrades.push({
+              symbol: sym,
+              type: 'LONG',
+              dateTime: exec.dateTime,
+              date: exec.date,
+              qty: matched,
+              entryPrice: longOpen.price,
+              exitPrice: exec.price,
+              fee: totalTradeFee,
+              pnl: netPnL
+            });
+
+            longOpen.qty -= matched;
+            remQty -= matched;
+            if (longOpen.qty === 0) pos.longStack.shift();
+          }
+        }
+        else if (exec.side === 'SS' || exec.side === 'SHORT') {
+          pos.shortStack.push({
+            price: exec.price,
+            qty: remQty,
+            feePerShare: feePerShare,
+            dateTime: exec.dateTime,
+            date: exec.date
+          });
+        }
+        else if (exec.side === 'BC' || exec.side === 'COVER') {
+          while (remQty > 0 && pos.shortStack.length > 0) {
+            let shortOpen = pos.shortStack[0];
+            let matched = Math.min(remQty, shortOpen.qty);
+
+            let grossPnL = (shortOpen.price - exec.price) * matched;
+            let totalTradeFee = (shortOpen.feePerShare + feePerShare) * matched;
+            let netPnL = grossPnL - totalTradeFee;
+
+            closedTrades.push({
+              symbol: sym,
+              type: 'SHORT',
+              dateTime: exec.dateTime,
+              date: exec.date,
+              qty: matched,
+              entryPrice: shortOpen.price,
+              exitPrice: exec.price,
+              fee: totalTradeFee,
+              pnl: netPnL
+            });
+
+            shortOpen.qty -= matched;
+            remQty -= matched;
+            if (shortOpen.qty === 0) pos.shortStack.shift();
+          }
+        }
+      });
+
+      if (closedTrades.length > 0) {
+        updateDashboard(closedTrades, true);
+      } else {
+        alert("Found executions, but could not pair completed BUY/SELL or SHORT/COVER trades.");
+      }
+    }
+
+    function updateDashboard(trades, shouldSave = true) {
+      if (shouldSave) {
+        localStorage.setItem('tradeZero_journal_data', JSON.stringify(trades));
+      }
+
+      let totalPnL = 0;
+      let totalFees = 0;
+      let winningTrades = 0;
+      let losingTrades = 0;
+      let grossProfit = 0;
+      let grossLoss = 0;
+      let bestProfit = -Infinity;
+      let biggestLoss = Infinity;
+      let totalQty = 0;
+
+      let dailySummary = {};
+      let equityCurveData = [STARTING_BALANCE];
+      let chartLabels = ['Start'];
+      let runningBalance = STARTING_BALANCE;
+
+      trades.forEach((t) => {
+        const pnl = t.pnl;
+        const fee = t.fee || 0;
+        
+        totalPnL += pnl;
+        totalFees += fee;
+        totalQty += t.qty;
+
+        if (pnl > 0) {
+          winningTrades++;
+          grossProfit += pnl;
+          if (pnl > bestProfit) bestProfit = pnl;
+        } else if (pnl < 0) {
+          losingTrades++;
+          grossLoss += Math.abs(pnl);
+          if (pnl < biggestLoss) biggestLoss = pnl;
+        }
+
+        runningBalance += pnl;
+        equityCurveData.push(runningBalance);
+        
+        let dateKey = t.date || 'N/A';
+        if (!dailySummary[dateKey]) {
+          dailySummary[dateKey] = { trades: 0, result: 0 };
+        }
+        dailySummary[dateKey].trades += 1;
+        dailySummary[dateKey].result += pnl;
+
+        chartLabels.push(t.dateTime || dateKey);
+      });
+
+      if (bestProfit === -Infinity) bestProfit = 0;
+      if (biggestLoss === Infinity) biggestLoss = 0;
+
+      // New Calculated Metrics: Win Rate & Reward/Risk Ratio
+      const winRate = trades.length > 0 ? ((winningTrades / trades.length) * 100).toFixed(1) : '0.0';
+      const avgWin = winningTrades > 0 ? (grossProfit / winningTrades) : 0;
+      const avgLoss = losingTrades > 0 ? (grossLoss / losingTrades) : 0;
+      const rewardRiskRatio = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : avgWin.toFixed(2);
+
+      const currentBalance = STARTING_BALANCE + totalPnL;
+      const profitFactor = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : grossProfit.toFixed(2);
+      const expectancy = trades.length > 0 ? (totalPnL / trades.length).toFixed(2) : '0.00';
+      const avgTradeSize = trades.length > 0 ? Math.round(totalQty / trades.length) : 0;
+
+      // Header Updates
+      document.getElementById('topBalance').innerText = `$${currentBalance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      document.getElementById('topTotalPnL').innerText = `${totalPnL >= 0 ? '+' : ''}$${totalPnL.toFixed(2)}`;
+      document.getElementById('topTotalPnL').style.color = totalPnL >= 0 ? 'var(--green)' : 'var(--red)';
+      document.getElementById('chartEquity').innerText = `$${currentBalance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+      // Cards Updates
+      document.getElementById('statWinRate').innerText = `${winRate}%`;
+      document.getElementById('statRewardRisk').innerText = `${rewardRiskRatio}`;
+      document.getElementById('statNetProfit').innerText = `$${totalPnL.toFixed(2)}`;
+      document.getElementById('statGrossProfit').innerText = `$${grossProfit.toFixed(2)}`;
+      document.getElementById('statGrossLoss').innerText = `$${grossLoss.toFixed(2)}`;
+      document.getElementById('statProfitFactor').innerText = profitFactor;
+      document.getElementById('statBestProfit').innerText = `$${bestProfit.toFixed(2)}`;
+      document.getElementById('statBiggestLoss').innerText = `$${Math.abs(biggestLoss).toFixed(2)}`;
+      document.getElementById('statExpectancy').innerText = `$${expectancy}`;
+      document.getElementById('statAvgTradeSize').innerText = `${avgTradeSize.toLocaleString()} shares`;
+
+      // Footer Updates
+      document.getElementById('tblTotalTrades').innerText = trades.length;
+      document.getElementById('tblTotalFees').innerText = `$${totalFees.toFixed(2)}`;
+      document.getElementById('tblTotalPnL').innerText = `$${totalPnL.toFixed(2)}`;
+
+      // Render Closed Individual Trades
+      const tradesTbody = document.getElementById('tradesTableBody');
+      tradesTbody.innerHTML = '';
+      trades.slice().reverse().forEach(t => {
+        const tr = document.createElement('tr');
+        const isWin = t.pnl >= 0;
+        tr.innerHTML = `
+          <td><b>${t.symbol}</b></td>
+          <td><span class="${t.type === 'LONG' ? 'badge-buy' : 'badge-sell'}">${t.type}</span></td>
+          <td>${t.dateTime}</td>
+          <td>${t.qty.toLocaleString()}</td>
+          <td>$${t.entryPrice.toFixed(2)}</td>
+          <td>$${t.exitPrice.toFixed(2)}</td>
+          <td>$${t.fee.toFixed(2)}</td>
+          <td style="color: ${isWin ? 'var(--green)' : 'var(--red)'}; font-weight:600;">${isWin ? '+' : ''}$${t.pnl.toFixed(2)}</td>
+          <td><span class="${isWin ? 'badge-win' : 'badge-loss'}">${isWin ? 'Win' : 'Loss'}</span></td>
+        `;
+        tradesTbody.appendChild(tr);
+      });
+
+      // Render Daily Summary
+      const dailyTbody = document.getElementById('dailyTableBody');
+      dailyTbody.innerHTML = '';
+      Object.keys(dailySummary).forEach(dateStr => {
+        const item = dailySummary[dateStr];
+        const tr = document.createElement('tr');
+        const isPos = item.result >= 0;
+        tr.innerHTML = `
+          <td><b>${dateStr}</b></td>
+          <td>${item.trades}</td>
+          <td style="color: ${isPos ? 'var(--green)' : 'var(--red)'}; font-weight:600;">${isPos ? '+' : ''}$${item.result.toFixed(2)}</td>
+        `;
+        dailyTbody.appendChild(tr);
+      });
+
+      // Render Equity Curve
+      updateChart(chartLabels, equityCurveData);
+    }
+
+    function initChart() {
+      const ctx = document.getElementById('equityChart').getContext('2d');
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['Start'],
+          datasets: [{
+            label: 'Account Equity ($)',
+            data: [STARTING_BALANCE],
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34, 197, 94, 0.05)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.15,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: '#1f212a' }, ticks: { color: '#8b8f9a' } },
+            y: { grid: { color: '#1f212a' }, ticks: { color: '#8b8f9a' } }
+          }
+        }
+      });
+    }
+
+    function updateChart(labels, dataPoints) {
+      if (!chartInstance) return;
+      chartInstance.data.labels = labels;
+      chartInstance.data.datasets[0].data = dataPoints;
+      chartInstance.update();
+    }
+  </script>
+</body>
+</html>
